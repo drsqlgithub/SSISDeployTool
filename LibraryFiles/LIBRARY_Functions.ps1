@@ -26,9 +26,6 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
         #Adds a document to the Visio window
         $VisioDoc = New-VisioDocument
         
-        #includes the list of locations of files and tools used for all projects
-        .\LibraryFiles\LIBRARY_Locations.ps1
-
         #now the shapes are added to the window
         $viShapes=Open-VisioDocument -Filename $G_VisioTempate
 
@@ -64,7 +61,7 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
             #This subloop tells me if the item has a schedule. A scheduled node is a root node to the directed graph
             #so I make it look different
             $ItemsJ = $ScheduleItems.JobSchedule.Count
-            $Item = $ChildItem #default to it being a child node
+            $DrawingItem = $ChildItem #default to it being a child node
             for ($j = 0; $j -lt $itemsJ ; $j++) {
                 
                 $L11_SystemName = $ScheduleItems.JobSchedule[$j].SystemName
@@ -72,14 +69,14 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
                 $L11_EnvironmentName = $ScheduleItems.JobSchedule[$j].EnvironmentName
         
                 IF ($L11_SystemName -eq $L1_SystemName -And $L11_SubSystemName -eq $L1_SubSystemName -And $L11_EnvironmentName -eq $L1_EnvironmentName ){
-                    $Item = $ParentItem #Make the node look like a parent node if a row matched;
+                    $DrawingItem = $ParentItem #Make the node look like a parent node if a row matched;
                     break; #can stop because it is already a parent
                 }
                 else {
                 }
             }
             #drop the item on the canvas anywhere, we will redraw
-            $Shape = $Page.drop($Item,1.0,1.0)
+            $Shape = $Page.drop($DrawingItem,1.0,1.0)
             #set the text and name of the shape
             $Shape.Text = "$ShapeText"
             $Shape.Name = "$ShapeName"
@@ -96,7 +93,7 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
             $L2_SubsystemName = $DependencyItems.JobDependency[$i].SubsystemName
             $L2_EnvironmentName = $DependencyItems.JobDependency[$i].EnvironmentName
 
-            #this is the node that must finish first
+            #this is the node that must finish first in the calling hierarchy
             $L2_DependsOnSystemName = $DependencyItems.JobDependency[$i].DependsOnSystemName
             $L2_DependsOnSubsystemName = $DependencyItems.JobDependency[$i].DependsOnSubsystemName
             $L2_DependsOnEnvironmentName = $DependencyItems.JobDependency[$i].DependsOnEnvironmentName
