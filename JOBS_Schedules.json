@@ -1,0 +1,12 @@
+{
+    "JobSchedule": [
+        {
+            "SystemName": "OrderProcessing",
+            "SubsystemName": "_MasterOrderProcessing",
+            "EnvironmentName": "GeneralOperation",
+            "JobStartHour" : 12,
+            "JobStartMinute" : 0,
+            "DaysOfWeek" : "MON,TUE,WED,THU,FRI,SAT,SUN"
+        }
+    ]
+}

@@ -1,0 +1,29 @@
+{
+    "Jobs": [
+        {
+            "SystemName": "SalesProcessing",
+            "SubsystemName": "_MasterSalesProcessing",
+            "EnvironmentName": "GeneralOperation"
+        },
+        {
+            "SystemName": "OrderProcessing",
+            "SubsystemName": "_MasterOrderProcessing",
+            "EnvironmentName": "GeneralOperation"
+        },
+        {
+            "SystemName": "DayAnalysis",
+            "SubsystemName": "_MasterDayAnalysis",
+            "EnvironmentName": "GeneralOperation"
+        },
+        {
+            "SystemName": "OrderDataWarehouse",
+            "SubsystemName": "_MasterOrderDataWarehouse",
+            "EnvironmentName": "GeneralOperation"
+        },
+        {
+            "SystemName": "PostProcessing",
+            "SubsystemName": "_PostProcessing",
+            "EnvironmentName": "GeneralOperation"
+        }
+    ]
+}

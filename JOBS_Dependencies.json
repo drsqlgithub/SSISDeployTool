@@ -1,0 +1,61 @@
+{
+    "JobDependency": [
+        {
+            "SystemName": "SalesProcessing",
+            "SubsystemName": "_MasterSalesProcessing",
+            "EnvironmentName": "GeneralOperation",
+
+            "DependsOnSystemName": "OrderProcessing",
+            "DependsOnSubsystemName": "_MasterOrderProcessing",
+            "DependsOnEnvironmentName": "GeneralOperation",
+            "DependencyNotes" : "Added because orders and sales running together were crushing bandwidth"
+        },
+        {
+            "SystemName": "DayAnalysis",
+            "SubsystemName": "_MasterDayAnalysis",
+            "EnvironmentName": "GeneralOperation",
+
+            "DependsOnSystemName": "OrderProcessing",
+            "DependsOnSubsystemName": "_MasterOrderProcessing",
+            "DependsOnEnvironmentName": "GeneralOperation",
+            "DependencyNotes" : ""
+        },
+        {
+            "SystemName": "OrderDataWarehouse",
+            "SubsystemName": "_MasterOrderDataWarehouse",
+            "EnvironmentName": "GeneralOperation",
+
+            "DependsOnSystemName": "OrderProcessing",
+            "DependsOnSubsystemName": "_MasterOrderProcessing",
+            "DependsOnEnvironmentName": "GeneralOperation",
+            "DependencyNotes" : ""
+        },
+        {
+            "SystemName": "PostProcessing",
+            "SubsystemName": "_PostProcessing",
+            "EnvironmentName": "GeneralOperation",
+            "DependsOnSystemName": "OrderProcessing",
+            "DependsOnSubsystemName": "_MasterOrderProcessing",
+            "DependsOnEnvironmentName": "GeneralOperation",
+            "DependencyNotes" : ""
+        },
+        {
+            "SystemName": "PostProcessing",
+            "SubsystemName": "_PostProcessing",
+            "EnvironmentName": "GeneralOperation",
+            "DependsOnSystemName": "SalesProcessing",
+            "DependsOnSubsystemName": "_MasterSalesProcessing",
+            "DependsOnEnvironmentName": "GeneralOperation",
+            "DependencyNotes" : ""
+        },
+        {
+            "SystemName": "PostProcessing",
+            "SubsystemName": "_PostProcessing",
+            "EnvironmentName": "GeneralOperation",
+            "DependsOnSystemName": "OrderDataWarehouse",
+            "DependsOnSubsystemName": "_MasterOrderDataWarehouse",
+            "DependsOnEnvironmentName": "GeneralOperation",
+            "DependencyNotes" : ""
+        }
+    ]
+}
