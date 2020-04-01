@@ -1,10 +1,59 @@
-
 #######################
 # This file will have many of the functions needed for all of the deployment work I will be implementing
 #######################
+function agent_maintainCategory ($P_AgentServerName, $P_CategoryName) {
 
-function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,$P_SchedulesJsonFile)
-{
+    Try {
+            
+        $ssisServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server("$P_AgentServerName") 
+        $JobServer = $ssisServer.JobServer
+
+        $Category = $ssisServer.JobServer.JobCategories["$P_CategoryName"]
+        if (!$Category) {
+            $NewCategory = New-Object ('Microsoft.SqlServer.Management.Smo.Agent.JobCategory') ($JobServer, "$P_CategoryName")
+            $NewCategory.Create()
+        
+            if ($G_VerboseDetail) {
+                Write-Host "Added category name: $NewCategory"
+            }
+        }
+    }      
+
+    catch {
+        Write-Error $_
+        Write-Host "Something failed handling the category $P_CategoryName"
+        Throw;
+    }
+}
+
+function global:environmentvariable_decode {
+    <#
+    Used to decode an environment variable reference into its actual value. Environment variables are loaded
+    in the Variables_%EnvironmentName% area
+
+    This function will generally be used to take a token that has been coded, and use it to 
+    get the value from the array
+    #>
+
+    param($itemName)
+
+    $items = $EnvironmentVariableArray.Length / 3
+
+    for ($i = 0; $i -lt $items ; $i++) {
+        if ($itemName -eq $EnvironmentVariableArray[$i, 0]) {
+            $output = $EnvironmentVariableArray[$i, 1]
+        }
+    }
+    if ("" + $output + "" -eq "") {
+        throw "The array token passed in: [$itemName] was not found in the environment variable global array"
+    }
+    else {
+        return $output;
+    }
+
+};
+
+function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile, $P_DependencyJsonFile, $P_SchedulesJsonFile) {
     #Required: 
     #   1. Install Visio to your machine
     #   2. In Powershell run: install-module visio as administrator
@@ -12,11 +61,11 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
     #Minimal File Formats for this function:
     #$P_DefinitionItems Jobs:(SystemName, SubsystemName, EnvironmentName)
     #$P_DependencyItems JobDependency:(SystemName, SubsystemName, EnvironmentName, 
-                #DependsOnSystemName, DependsOnSubsystemName, DependsOnEnvironmentName)
+    #DependsOnSystemName, DependsOnSubsystemName, DependsOnEnvironmentName)
     #$P_ScheduleItems JobSchedule:(SystemName, SubsystemName, EnvironmentName)
 
     TRY {
-        if ($G_VerboseDetail){
+        if ($G_VerboseDetail) {
             Write-Host "SSIS_DrawHierarchInVisio $P_DefinitionJsonFile,$P_DependencyJsonFile,$P_SchedulesJsonFile"
         }
         
@@ -27,7 +76,7 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
         $VisioDoc = New-VisioDocument
         
         #now the shapes are added to the window
-        $viShapes=Open-VisioDocument -Filename $G_VisioTempate
+        $viShapes = Open-VisioDocument -Filename $G_VisioTempate
 
         #Set shape we will use for the job
         $ParentItem = $viShapes.Masters.Item("ParentNode")
@@ -43,7 +92,7 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
         $ScheduleItems = Get-Content $P_SchedulesJsonFile | ConvertFrom-Json 
 
         #Loop through the nodes items, and create a node on the diagram
-        if ($G_VerboseDetail){
+        if ($G_VerboseDetail) {
             Write-Host "Creating Nodes"
         }
         $itemsI = $DefinitionItems.Jobs.Count
@@ -68,7 +117,7 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
                 $L11_SubsystemName = $ScheduleItems.JobSchedule[$j].SubsystemName
                 $L11_EnvironmentName = $ScheduleItems.JobSchedule[$j].EnvironmentName
         
-                IF ($L11_SystemName -eq $L1_SystemName -And $L11_SubSystemName -eq $L1_SubSystemName -And $L11_EnvironmentName -eq $L1_EnvironmentName ){
+                IF ($L11_SystemName -eq $L1_SystemName -And $L11_SubSystemName -eq $L1_SubSystemName -And $L11_EnvironmentName -eq $L1_EnvironmentName ) {
                     $DrawingItem = $ParentItem #Make the node look like a parent node if a row matched;
                     break; #can stop because it is already a parent
                 }
@@ -76,12 +125,12 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
                 }
             }
             #drop the item on the canvas anywhere, we will redraw
-            $Shape = $Page.drop($DrawingItem,1.0,1.0)
+            $Shape = $Page.drop($DrawingItem, 1.0, 1.0)
             #set the text and name of the shape
             $Shape.Text = "$ShapeText"
             $Shape.Name = "$ShapeName"
         }
-        if ($G_VerboseDetail){
+        if ($G_VerboseDetail) {
             Write-Host "Creating Edges"
         }
         
@@ -110,13 +159,13 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile,$P_DependencyJsonFile,
         $LayoutStyle = New-Object VisioAutomation.Models.LayoutStyles.FlowchartLayoutStyle
         #Apply the format, and I made it Landscape for wider models
         Format-VisioPage -LayoutStyle $LayoutStyle -Orientation "Landscape" 
-        if ($G_VerboseDetail){
+        if ($G_VerboseDetail) {
             Write-Host "Diagram completed and created in a Seperate Window, Not Saved."
         }
     }
-    catch
-    {
+    catch {
         Write-Error $_
         Write-Host "Something is incorrect in the JOBS_BuildBaseFile"
+        Throw
     }
 }

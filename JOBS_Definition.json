@@ -3,12 +3,14 @@
         {
             "SystemName": "SalesProcessing",
             "SubsystemName": "_MasterSalesProcessing",
-            "EnvironmentName": "GeneralOperation"
+            "EnvironmentName": "GeneralOperation",
+            "JobCategory": "Test1"
         },
         {
             "SystemName": "OrderProcessing",
             "SubsystemName": "_MasterOrderProcessing",
-            "EnvironmentName": "GeneralOperation"
+            "EnvironmentName": "GeneralOperation",
+            "JobCategory": "Test2"
         },
         {
             "SystemName": "DayAnalysis",
