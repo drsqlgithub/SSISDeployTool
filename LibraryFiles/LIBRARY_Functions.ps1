@@ -1,56 +1,83 @@
 #######################
 # This file will have many of the functions needed for all of the deployment work I will be implementing
 #######################
-function agent_maintainCategory ($P_AgentServerName, $P_CategoryName) {
 
-    Try {
-            
-        $ssisServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server("$P_AgentServerName") 
-        $JobServer = $ssisServer.JobServer
-
-        $Category = $ssisServer.JobServer.JobCategories["$P_CategoryName"]
-        if (!$Category) {
-            $NewCategory = New-Object ('Microsoft.SqlServer.Management.Smo.Agent.JobCategory') ($JobServer, "$P_CategoryName")
-            $NewCategory.Create()
-        
-            if ($G_VerboseDetail) {
-                Write-Host "Added category name: $NewCategory"
-            }
-        }
-    }      
-
-    catch {
-        Write-Error $_
-        Write-Host "Something failed handling the category $P_CategoryName"
-        Throw;
-    }
-}
-
-function global:environmentvariable_decode {
+function global:environmentvariable_decode ($P_itemName){
     <#
     Used to decode an environment variable reference into its actual value. Environment variables are loaded
-    in the Variables_%EnvironmentName% area
-
-    This function will generally be used to take a token that has been coded, and use it to 
-    get the value from the array
+    in the Variables_%EnvironmentName% area, allowing for a different version in dev, prod, etc
     #>
-
-    param($itemName)
-
-    $items = $EnvironmentVariableArray.Length / 3
-
+    $items = $EnvironmentVariableArray.Count;
     for ($i = 0; $i -lt $items ; $i++) {
-        if ($itemName -eq $EnvironmentVariableArray[$i, 0]) {
+        #if the 0 position value matches (the name), then use the 1 postion as the return value
+        if ($P_itemName -eq $EnvironmentVariableArray[$i, 0]) {
             $output = $EnvironmentVariableArray[$i, 1]
         }
     }
-    if ("" + $output + "" -eq "") {
-        throw "The array token passed in: [$itemName] was not found in the environment variable global array"
+    if (!$output) {
+        Write-Error "The array token passed in: [$P_itemName] was not found in the environment variable global array"
+        Throw
     }
     else {
         return $output;
     }
+};
 
+function global:databasename_decode ($P_databaseName) {
+    <#
+    Used to decode an database name variable reference into its actual value. Environment variables are loaded
+    in the Variables_Global file
+    #>
+    
+    $items = $DatabaseNameArray.Count;
+
+    for ($i = 0; $i -lt $items; $i++) {
+        if ($P_databaseName -eq $DatabaseNameArray[$i, 0]) {
+            $output = $DatabaseNameArray[$i, 1]
+        }
+    }
+    if (!$output) {
+        Write-Error "The database array token passed in: [$P_databaseName] was not found in the database global array"
+        Throw;
+    }
+    else {
+        return $output;
+    }
+};    
+
+function global:databaseServer_decode ($P_databaseName) {
+    <#
+    Used to decode an database name and return its physical database name. Environment variables are loaded
+    in the Variables_Global file
+    #>
+    $items = $DatabaseNameArray.Count;
+
+    for ($i = 0; $i -lt $items; $i++) {
+        if ($P_databaseName -eq $DatabaseNameArray[$i, 0]) {
+            $output = $DatabaseNameArray[$i, 2] #Server entry
+        }
+    }
+    if (!$output) {
+        Write-Error "The database array token passed in: [$P_databaseName] was not found in the database global array"
+        Throw;
+    }
+    else {
+        return $output;
+    }
+};  
+function global:databasename_getconnectionStringSMO ($P_databaseName) {
+    <#
+    Used to for a connection string for the databse variable reference. Database 
+    variables are located in the Variables_Global file, but their environment based 
+    location is loaded into the array during initialization
+    #> 
+    $serverName = databaseServer_decode($P_databasename);
+    $physicaldatabaseName = databasename_decode($P_databasename)
+
+    $connectionString = "Server=" + $serverName + ";Database=" +
+                   $physicaldatabaseName + ";Trusted_Connection=True;"
+
+    return $connectionString;
 };
 
 function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile, $P_DependencyJsonFile, $P_SchedulesJsonFile) {

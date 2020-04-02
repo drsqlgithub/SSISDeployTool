@@ -3,14 +3,12 @@
         {
             "SystemName": "SalesProcessing",
             "SubsystemName": "_MasterSalesProcessing",
-            "EnvironmentName": "GeneralOperation",
-            "JobCategory": "Test1"
+            "EnvironmentName": "GeneralOperation"
         },
         {
             "SystemName": "OrderProcessing",
             "SubsystemName": "_MasterOrderProcessing",
-            "EnvironmentName": "GeneralOperation",
-            "JobCategory": "Test2"
+            "EnvironmentName": "GeneralOperation"
         },
         {
             "SystemName": "DayAnalysis",
@@ -25,7 +23,8 @@
         {
             "SystemName": "PostProcessing",
             "SubsystemName": "_PostProcessing",
-            "EnvironmentName": "GeneralOperation"
+            "EnvironmentName": "GeneralOperation",
+            "JobCategory": "MaintenenceETL"
         }
     ]
 }
