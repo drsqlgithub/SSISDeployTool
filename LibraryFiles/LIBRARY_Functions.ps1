@@ -196,3 +196,92 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile, $P_DependencyJsonFile
         Throw
     }
 }
+
+
+function agent_maintainCategory ($P_AgentServerName, $P_CategoryName) {
+    Try {
+        #Connect to the SQL Server, you will need to be using a trusted connection here.            
+        $ssisServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server("$P_AgentServerName") 
+        
+        #variable for the jobserver
+        $JobServer = $ssisServer.JobServer
+
+        #grab the job category by name that was passed in
+        $Category = $JobServer.JobCategories["$P_CategoryName"] 
+        #if it wasn't found, add it
+        if (!$Category) {
+            #create the new category
+            $NewCategory = New-Object `
+                           ('Microsoft.SqlServer.Management.Smo.Agent.JobCategory')`
+                                                     ($JobServer, "$P_CategoryName")
+            #This was really hard for me. There is a JobCategories collection too... But you add
+            #the new Category here.
+            $NewCategory.Create()
+        
+            if ($G_VerboseDetail) {
+                Write-Host "Added category name: $NewCategory"
+            }
+        }
+    }      
+    catch {
+        Write-Error $_
+        Write-Host "Something failed handling the category $P_CategoryName"
+        Throw;
+    }
+}
+
+function agent_CreateJobsFromJson ($P_ServerName, $P_DefinitionJsonFile, $P_DependencyJsonFile, $P_ScheduleJsonFile){
+
+    #Open the JSON files
+    $DefinitionItems = Get-Content $P_DefinitionJsonFile | ConvertFrom-Json 
+    $ScheduleItems = Get-Content $P_ScheduleJsonFile | ConvertFrom-Json 
+    $DependencyItems = Get-Content $P_DependencyJsonFile | ConvertFrom-Json 
+
+    #Loop through the nodes items, and create a node on the diagram
+    if ($G_VerboseDetail) {
+        Write-Host "Creating Jobs"
+    }
+    $itemsI = $DefinitionItems.Jobs.Count
+        
+    for ($i = 0; $i -lt $itemsI ; $i++) {
+        #fetch the three name parts (if your folder and project names differ,
+        #     you can easily add that)
+        #$L1_SystemName = $DefinitionItems.Jobs[$i].SystemName
+        #$L1_SubsystemName = $DefinitionItems.Jobs[$i].SubsystemName
+        #$L1_EnvironmentName = $DefinitionItems.Jobs[$i].EnvironmentName
+        $L1_JobCategory = $DefinitionItems.Jobs[$i].JobCategory
+
+        #if JobCategory is not included, use the default
+        if (!$L1_JobCategory){
+            $L1_JobCategory = $G_DefaultJobCategory;
+        }
+
+        if ($G_VerboseDetail) {
+            Write-Host "Handling Job Category: [$L1_JobCategory]"
+        }
+        #check for existence/create category
+        agent_maintainCategory -P_AgentServerName $P_ServerName `
+                               -P_CategoryName $L1_JobCategory
+    }
+    
+    $itemsI = $DependencyItems.JobDependency.Count
+        
+    for ($i = 0; $i -lt $itemsI ; $i++) {
+        #fetch the three name parts (if your folder and project 
+        #                         names differ, you can easily add that)
+        #$L2_SystemName = $DependencyItems.JobDependency[$i].SystemName
+        #$L2_SubsystemName = $DependencyItems.JobDependency[$i].SubsystemName
+        #$L2_EnvironmentName = $DependencyItems.JobDependency[$i].EnvironmentName
+        
+    }
+
+    $itemsI = $ScheduleItems.JobSchedule.Count
+        
+    for ($i = 0; $i -lt $itemsI ; $i++) {
+        #fetch the three name parts (if your folder and project 
+        #              names differ, you can easily add that)
+        #$L2_SystemName = $ScheduleItems.JobSchedule[$i].SystemName
+        #$L2_SubsystemName = $ScheduleItems.JobSchedule[$i].SubsystemName
+        #$L2_EnvironmentName = $ScheduleItems.JobSchedule[$i].EnvironmentName
+    }
+}
