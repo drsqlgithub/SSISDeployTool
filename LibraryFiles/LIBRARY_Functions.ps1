@@ -2,7 +2,29 @@
 # This file will have many of the functions needed for all of the deployment work I will be implementing
 #######################
 
-function global:environmentvariable_decode ($P_itemName){
+function SQLAgent_FormName ($P_SystemName, $P_SubSystemName, $P_EnvironmentName, $P_JobStartType) {
+    #The name of the agent job is used as the handle to access it in many places. If you want
+    #to use a different form of the name, this is where you would locate it
+    write-host "$NamePrefix-$P_SystemName-$P_SubSystemName-$P_EnvironmentName (Managed)"
+    try {
+        #prefix with TRIGGERED or SCHEDULED, the let the user know which jobs are supposed
+        #to start on their own
+        $NamePrefix = $P_JobStartType.ToUpper()
+        
+        #the (Managed) suffix will be used when we go to delete and recreate jobs in bulk"
+        if ($G_VerboseDetail) {
+            write-host "Defined name $NamePrefix-$P_SystemName-$P_SubSystemName-$P_EnvironmentName (Managed)"
+        }
+        Return("$NamePrefix-$P_SystemName-$P_SubSystemName-$P_EnvironmentName (Managed)")
+    }
+    catch {
+        Write-Error $_
+        write-host  'Error formatting SQL Agent job name'   
+        throw
+    }
+}
+
+function global:environmentvariable_decode ($P_itemName) {
     <#
     Used to decode an environment variable reference into its actual value. Environment variables are loaded
     in the Variables_%EnvironmentName% area, allowing for a different version in dev, prod, etc
@@ -75,7 +97,7 @@ function global:databasename_getconnectionStringSMO ($P_databaseName) {
     $physicaldatabaseName = databasename_decode($P_databasename)
 
     $connectionString = "Server=" + $serverName + ";Database=" +
-                   $physicaldatabaseName + ";Trusted_Connection=True;"
+    $physicaldatabaseName + ";Trusted_Connection=True;"
 
     return $connectionString;
 };
@@ -197,7 +219,6 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile, $P_DependencyJsonFile
     }
 }
 
-
 function agent_maintainCategory ($P_AgentServerName, $P_CategoryName) {
     Try {
         #Connect to the SQL Server, you will need to be using a trusted connection here.            
@@ -212,8 +233,8 @@ function agent_maintainCategory ($P_AgentServerName, $P_CategoryName) {
         if (!$Category) {
             #create the new category
             $NewCategory = New-Object `
-                           ('Microsoft.SqlServer.Management.Smo.Agent.JobCategory')`
-                                                     ($JobServer, "$P_CategoryName")
+            ('Microsoft.SqlServer.Management.Smo.Agent.JobCategory')`
+            ($JobServer, "$P_CategoryName")
             #This was really hard for me. There is a JobCategories collection too... But you add
             #the new Category here.
             $NewCategory.Create()
@@ -230,58 +251,187 @@ function agent_maintainCategory ($P_AgentServerName, $P_CategoryName) {
     }
 }
 
-function agent_CreateJobsFromJson ($P_ServerName, $P_DefinitionJsonFile, $P_DependencyJsonFile, $P_ScheduleJsonFile){
+function agent_CreateJobsFromJson ($P_ServerName, $P_DefinitionJsonFile, $P_DependencyJsonFile, $P_ScheduleJsonFile) {
+    TRY {
+   
+        #Open the JSON files
+        $DefinitionItems = Get-Content $P_DefinitionJsonFile | ConvertFrom-Json 
+        $ScheduleItems = Get-Content $P_ScheduleJsonFile | ConvertFrom-Json 
+        $DependencyItems = Get-Content $P_DependencyJsonFile | ConvertFrom-Json 
 
-    #Open the JSON files
-    $DefinitionItems = Get-Content $P_DefinitionJsonFile | ConvertFrom-Json 
-    $ScheduleItems = Get-Content $P_ScheduleJsonFile | ConvertFrom-Json 
-    $DependencyItems = Get-Content $P_DependencyJsonFile | ConvertFrom-Json 
-
-    #Loop through the nodes items, and create a node on the diagram
-    if ($G_VerboseDetail) {
-        Write-Host "Creating Jobs"
-    }
-    $itemsI = $DefinitionItems.Jobs.Count
-        
-    for ($i = 0; $i -lt $itemsI ; $i++) {
-        #fetch the three name parts (if your folder and project names differ,
-        #     you can easily add that)
-        #$L1_SystemName = $DefinitionItems.Jobs[$i].SystemName
-        #$L1_SubsystemName = $DefinitionItems.Jobs[$i].SubsystemName
-        #$L1_EnvironmentName = $DefinitionItems.Jobs[$i].EnvironmentName
-        $L1_JobCategory = $DefinitionItems.Jobs[$i].JobCategory
-
-        #if JobCategory is not included, use the default
-        if (!$L1_JobCategory){
-            $L1_JobCategory = $G_DefaultJobCategory;
+        #Loop through the nodes items, and create a node on the diagram
+        if ($G_VerboseDetail) {
+            Write-Host "Creating Jobs"
         }
+        $itemsI = $DefinitionItems.Jobs.Count
+        
+        for ($i = 0; $i -lt $itemsI ; $i++) {
+            #fetch the three name parts (if your folder and project names differ,
+            #     you can easily add that)
+            $L1_SystemName = $DefinitionItems.Jobs[$i].SystemName
+            $L1_SubsystemName = $DefinitionItems.Jobs[$i].SubsystemName
+            $L1_EnvironmentName = $DefinitionItems.Jobs[$i].EnvironmentName
+            $L1_JobCategory = $DefinitionItems.Jobs[$i].JobCategory
+            $L1_JobStartType = $DefinitionItems.Jobs[$i].JobStartType
+            $L1_JobDescription = $DefinitionItems.Jobs[$i].JobDescription
+            $L1_JobType = $DefinitionItems.Jobs[$i].JobType
+            $L1_JobCodeText = $DefinitionItems.Jobs[$i].JobCodeText
+            $L1_JobCodeDatabase = $DefinitionItems.Jobs[$i].JobcodeDatabase
+
+            #if JobCategory is not included, use the default
+            if (!$L1_JobCategory) {
+                $L1_JobCategory = $G_DefaultJobCategory;
+            }
+
+            if ($G_VerboseDetail) {
+                Write-Host "Handling Job Category: [$L1_JobCategory]"
+            }
+            #check for existence/create category
+            agent_maintainCategory -P_AgentServerName $P_ServerName `
+                -P_CategoryName $L1_JobCategory
+
+            $L1_AgentJobName = SQLAgent_FormName -P_SystemName $L1_SystemName -P_SubSystemName $L1_SubSystemName `
+                                  -P_EnvironmentName $L1_EnvironmentName -P_JobStartType $L1_JobStartType
+            
+            if ($G_VerboseDetail) {
+                Write-Host "Creating Job [$L1_AgentJobName]"
+            }                   
+                                  
+            agent_createManagedJobBase -P_ServerName $P_ServerName -P_AgentJobName $L1_AgentJobName `
+                                       -P_JobCategory $L1_JobCategory -P_JobDescription $L1_JobDescription
+
+            #This is where error step will go, first to make it easier to reference
+
+            ##This is where dependency starting step will go
+
+            #step to add in the primary job step, depending on the type of job
+            IF ($L1_JobType -eq "TSQL") {
+                agent_addTSQLJobStep -P_ServerName $P_ServerName -P_AgentJobName $L1_AgentJobName `
+                            -P_JobCodeText $L1_JobCodeText -P_JobCodeDatabase $L1_JobCodeDatabase
+            }
+
+            ##This is where dependency finalize and launch depencencies will go
+
+            ##This is where emailing upon completion will go
+
+        }
+    
+        $itemsI = $DependencyItems.JobDependency.Count
+        
+        for ($i = 0; $i -lt $itemsI ; $i++) {
+            #fetch the three name parts (if your folder and project 
+            #                         names differ, you can easily add that)
+            #$L2_SystemName = $DependencyItems.JobDependency[$i].SystemName
+            #$L2_SubsystemName = $DependencyItems.JobDependency[$i].SubsystemName
+            #$L2_EnvironmentName = $DependencyItems.JobDependency[$i].EnvironmentName
+        
+        }
+
+        $itemsI = $ScheduleItems.JobSchedule.Count
+        
+        for ($i = 0; $i -lt $itemsI ; $i++) {
+            #fetch the three name parts (if your folder and project 
+            #              names differ, you can easily add that)
+            #$L2_SystemName = $ScheduleItems.JobSchedule[$i].SystemName
+            #$L2_SubsystemName = $ScheduleItems.JobSchedule[$i].SubsystemName
+            #$L2_EnvironmentName = $ScheduleItems.JobSchedule[$i].EnvironmentName
+        }
+    }
+    catch {
+        Write-Error $_
+        Write-Host "Something failed handling the category $P_CategoryName"
+        Throw;
+    }
+}
+
+function agent_createManagedJobBase ($P_ServerName, $P_AgentJobName, $P_JobCategory, $P_JobDescription) {
+    #The base Job creation step
+    TRY {
+        #Connect to our SQL Server Instance, using a trusted connection
+        $SQLServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server("$P_ServerName")
 
         if ($G_VerboseDetail) {
-            Write-Host "Handling Job Category: [$L1_JobCategory]"
+            write-host "Creating [$P_AgentJobName]"
         }
-        #check for existence/create category
-        agent_maintainCategory -P_AgentServerName $P_ServerName `
-                               -P_CategoryName $L1_JobCategory
-    }
-    
-    $itemsI = $DependencyItems.JobDependency.Count
-        
-    for ($i = 0; $i -lt $itemsI ; $i++) {
-        #fetch the three name parts (if your folder and project 
-        #                         names differ, you can easily add that)
-        #$L2_SystemName = $DependencyItems.JobDependency[$i].SystemName
-        #$L2_SubsystemName = $DependencyItems.JobDependency[$i].SubsystemName
-        #$L2_EnvironmentName = $DependencyItems.JobDependency[$i].EnvironmentName
-        
-    }
 
-    $itemsI = $ScheduleItems.JobSchedule.Count
+        # Check if job already exists. Then rename for safety
+        $SQLAgentJob = $SQLServer.JobServer.Jobs[$P_AgentJobName]
+        if ($SQLAgentJob) {
         
-    for ($i = 0; $i -lt $itemsI ; $i++) {
-        #fetch the three name parts (if your folder and project 
-        #              names differ, you can easily add that)
-        #$L2_SystemName = $ScheduleItems.JobSchedule[$i].SystemName
-        #$L2_SubsystemName = $ScheduleItems.JobSchedule[$i].SubsystemName
-        #$L2_EnvironmentName = $ScheduleItems.JobSchedule[$i].EnvironmentName
+            if ($G_VerboseDetail) {
+                Write-Host "*** Job with name '$AgentJobName' found, renaming and disabling it"
+            }
+            $SQLAgentJob.Rename("z_old_" + $SQLAgentJob.Name + (Get-Date -f MM-dd-yyyy_HH_mm_ss))
+            $SQLAgentJob.IsEnabled = $false
+            $SQLAgentJob.Alter()
+        }
+
+        #Create new (empty) job 
+        $NewSQLAgentJob = New-Object -TypeName Microsoft.SqlServer.Management.SMO.Agent.Job `
+            -argumentlist $SQLServer.JobServer, $P_AgentJobName
+        $NewSQLAgentJob.OwnerLoginName = "SA" #you could change this if you wanted, but this is typically
+        $NewSQLAgentJob.Description = $P_JobDescription         #best to have jobs owned by SA
+        $NewSQLAgentJob.Create()
+
+        #May alter this later, or leave to someone else.
+        $NewSQLAgentJob.ApplyToTargetServer("(local)") 
+        
+        #set the job category
+        $NewSQLAgentJob.Category = $P_JobCategory 
+
+        #set the operator to call if the job fails, based on the next settings
+        $OperatorOnCall = environmentvariable_decode('General_OperatorOnCall')
+        $NewSQLAgentJob.EmailLevel = [Microsoft.SqlServer.Management.Smo.Agent.CompletionAction]::OnFailure
+        $NewSQLAgentJob.OperatorToEmail = "$OperatorOnCall";
+        $NewSQLAgentJob.Alter()
+
+        if ($G_VerboseDetail) {
+            Write-Host "*** Job '$P_AgentJobName' created"
+        }
+    }
+    catch {
+        Write-Error $_
+        Write-Host "Something failed creating $P_AgentJobName"
+        Throw;
+    }
+}
+
+function agent_addTSQLJobStep ($P_ServerName, $P_AgentJobName, $P_JobCodeText, $P_JobCodeDatabase) {
+    #Used to create the primary jobsetp when it is a T-SQL job step
+
+    TRY {
+
+        if ($G_VerboseDetail){ 
+            Write-Host " Creating TSQL:Jobstep for the $P_AgentJobName" 
+        }
+        #Connect to the sql server with a trusted connection        
+        $SQLServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server("$P_ServerName")
+
+        #attach to the job we just created
+        $SQLAgentJob = $SQLServer.JobServer.Jobs[$P_AgentJobName]                    
+
+        #Add the base job step
+        $JobStepTSQL = New-Object -TypeName Microsoft.SqlServer.Management.SMO.Agent.JobStep `
+                                  -argumentlist $SQLAgentJob, "Primary Work Step - TSQL"
+    
+        #set the text of the command and the database where it executes
+        $JobStepTSQL.Command = $P_JobCodeText
+        $JobStepTSQL.DatabaseName = $P_JobCodeDatabase
+
+        #set what occurs on failure. For now, just quit with faiure
+        $JobStepTSQL.OnFailAction = [Microsoft.SqlServer.Management.Smo.Agent.StepCompletionAction]::QuitWithFailure
+
+        #create the step
+        $JobStepTSQL.Create()
+
+        if ($G_VerboseDetail){
+            Write-Host "*** TSQL:Jobstep created for the $P_AgentJobName"
+        }
+
+    }
+    catch {
+        Write-Error $_
+        Write-Host "Something failed creating the TSQL Jobstep for the $P_AgentJobName"
+        Throw;
     }
 }

@@ -29,3 +29,6 @@ $EnvironmentVariableArray[29,1] = "E:\MSSQL\JobLogs\"
 
 $EnvironmentVariableArray[33,0] = "General_AlertEmailAddress" 
 $EnvironmentVariableArray[33,1] = "drsql@hotmail.com"
+
+$EnvironmentVariableArray[34,0] = "General_OperatorOnCall" 
+$EnvironmentVariableArray[34,1] = "OnCall"
