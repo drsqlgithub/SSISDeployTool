@@ -1,6 +1,18 @@
 #######################
 # This file will have many of the functions needed for all of the deployment work I will be implementing
 #######################
+<#
+function functionname($P_Parameter1) {
+    Try {
+
+    }
+        Catch {
+            Write-Error $_
+            write-host "Error adding schedule to $P_JobName";
+            THROW
+        }
+}
+#>
 
 function SQLAgent_FormName ($P_SystemName, $P_SubSystemName, $P_EnvironmentName, $P_JobStartType) {
     #The name of the agent job is used as the handle to access it in many places. If you want
@@ -222,10 +234,10 @@ function SSIS_DrawHierarchyInVisio ($P_DefinitionJsonFile, $P_DependencyJsonFile
 function agent_maintainCategory ($P_AgentServerName, $P_CategoryName) {
     Try {
         #Connect to the SQL Server, you will need to be using a trusted connection here.            
-        $ssisServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server("$P_AgentServerName") 
+        $SQLServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server("$P_AgentServerName") 
         
         #variable for the jobserver
-        $JobServer = $ssisServer.JobServer
+        $JobServer = $SQLServer.JobServer
 
         #grab the job category by name that was passed in
         $Category = $JobServer.JobCategories["$P_CategoryName"] 
@@ -324,22 +336,67 @@ function agent_CreateJobsFromJson ($P_ServerName, $P_DefinitionJsonFile, $P_Depe
             #$L2_SystemName = $DependencyItems.JobDependency[$i].SystemName
             #$L2_SubsystemName = $DependencyItems.JobDependency[$i].SubsystemName
             #$L2_EnvironmentName = $DependencyItems.JobDependency[$i].EnvironmentName
-        
+       
         }
 
+        if ($G_VerboseDetail) {
+            Write-Host "Creating Schedules"
+        }
         $itemsI = $ScheduleItems.JobSchedule.Count
         
         for ($i = 0; $i -lt $itemsI ; $i++) {
-            #fetch the three name parts (if your folder and project 
-            #              names differ, you can easily add that)
-            #$L2_SystemName = $ScheduleItems.JobSchedule[$i].SystemName
-            #$L2_SubsystemName = $ScheduleItems.JobSchedule[$i].SubsystemName
-            #$L2_EnvironmentName = $ScheduleItems.JobSchedule[$i].EnvironmentName
+            $L3_SystemName = $ScheduleItems.JobSchedule[$i].SystemName
+            $L3_SubsystemName = $ScheduleItems.JobSchedule[$i].SubsystemName
+            $L3_EnvironmentName = $ScheduleItems.JobSchedule[$i].EnvironmentName
+            $L3_ScheduleType = $ScheduleItems.JobSchedule[$i].ScheduleType
+            
+            $L3_RecurrenceFrequency = $ScheduleItems.JobSchedule[$i].RecurrenceFrequency
+            $L3_DaysofTheWeek = $ScheduleItems.JobSchedule[$i].DaysOfTheWeek
+            $L3_InDayInterval = $ScheduleItems.JobSchedule[$i].InDayInterval
+            $L3_InDayIntervalType = $ScheduleItems.JobSchedule[$i].InDayIntervalType
+            $L3_MonthlyDayOfTheMonth = $ScheduleItems.JobSchedule[$i].MonthlyDayOfTheMonth
+            
+            $L3_JobStartDate = $ScheduleItems.JobSchedule[$i].JobStartDate
+            $L3_JobStartTime = $ScheduleItems.JobSchedule[$i].JobStartTime
+            $L3_JobEndDate = $ScheduleItems.JobSchedule[$i].JobEndDate
+            $L3_JobEndTime = $ScheduleItems.JobSchedule[$i].JobEndTime
+            $L3_Enabled = $ScheduleItems.JobSchedule[$i].Enabled
+            
+            
+            #default the start date
+            if (!$L3_JobStartDate) {$L3_JobStartDate = Get-Date}
+            #default the days of the week
+            if (!$L3_DaysOfTheWeek) {$L3_DaysOfTheWeek = "SUN,MON,TUE,WED,THU,FRI,SAT"}
+            #default recurrency frequency to be every 1 time period (week or month)
+            if (!$L3_RecurrenceFrequency) {$L3_RecurrenceFrequency = 1}
+            #default enabled to enabled
+            if (!$L3_Enabled) {$L3_Enabled = "True"}
+
+            #etch the name of the agent job you are adding the schedule to
+            $L3_AgentJobName = SQLAgent_FormName -P_SystemName $L3_SystemName -P_SubSystemName $L3_SubSystemName `
+            -P_EnvironmentName $L3_EnvironmentName -P_JobStartType "Scheduled" #Part of the definition of having a schedule
+
+            #onetime schedules are a lot easier, so I made it it's own function
+            if ($L3_ScheduleType -eq "Once") {
+                agent_AddOneTimeScheduleToJob -P_ServerName $P_ServerName -P_JobName $L3_AgentJobName `
+                                              -P_jobStartDate $L3_jobStartDate -P_JobStartTime $L3_JobStartTime `
+                                              -P_Enabled $L3_Enabled
+            }
+            else {
+                #monthly and weekly schedules varied only with the day/days it ran, so it became one call
+                agent_AddRecurringScheduleToJob -P_ServerName $P_ServerName -P_JobName $L3_AgentJobName `
+                            -P_ScheduleType $L3_ScheduleType -P_RecurrenceFrequency $L3_RecurrenceFrequency `
+                            -P_DaysOfTheWeek $L3_DaysOfTheWeek -P_InDayIntervalType $L3_InDayIntervalType `
+                            -P_InDayInterval $L3_InDayInterval -P_JobStartDate $L3_JobStartDate `
+                            -P_JobStartTime $L3_JobStartTime -P_JobEndDate $L3_JobEndDate `
+                            -P_JobEndTime $L3_JobEndTime -P_MonthlyDayOfTheMonth $L3_MonthlyDayOfTheMonth `
+                            -P_Enabled $L3_Enabled
+            }
         }
     }
     catch {
         Write-Error $_
-        Write-Host "Something failed handling the category $P_CategoryName"
+        Write-Host "Something failed creating the Jobs."
         Throw;
     }
 }
@@ -435,3 +492,178 @@ function agent_addTSQLJobStep ($P_ServerName, $P_AgentJobName, $P_JobCodeText, $
         Throw;
     }
 }
+
+function agent_SplitFrequency($P_JobFrequencyIntervalList) {
+#return the bitmask for the days of the week that correspond to the
+#list in the schedule
+    try {
+        
+        #split the items in the frequency list (which we do not check for
+        #dups or misspellings, so that is up to you)
+        $ItemList = $P_JobFrequencyIntervalList -split ","
+        $items = $ItemList.length 
+        $frequencyIntervalOutput = 0
+    
+        for ($i = 0; $i -lt $items ; $i++) {
+            switch ($ItemList[$i]) {
+                "SUN" { $frequencyIntervalOutput = $frequencyIntervalOutput + 1 }
+                "MON" { $frequencyIntervalOutput = $frequencyIntervalOutput + 2 }
+                "TUE" { $frequencyIntervalOutput = $frequencyIntervalOutput + 4 }
+                "WED" { $frequencyIntervalOutput = $frequencyIntervalOutput + 8 }
+                "THU" { $frequencyIntervalOutput = $frequencyIntervalOutput + 16 }
+                "FRI" { $frequencyIntervalOutput = $frequencyIntervalOutput + 32 }
+                "SAT" { $frequencyIntervalOutput = $frequencyIntervalOutput + 64 }
+            }
+        }
+        Return $FrequencyIntervalOutput
+    }
+    catch {
+        Write-Error $_
+        write-host "Error Splitting String For Frequency"   
+        THROW
+    }
+}
+
+function agent_AddRecurringScheduleToJob($P_ServerName, $P_JobName, $P_ScheduleType, $P_RecurrenceFrequency, `
+                     $P_DaysOfTheWeek, $P_InDayIntervalType, $P_InDayInterval, $P_jobStartDate, $P_JobStartTime, `
+                     $P_jobEndDate, $P_JobEndTime, $P_MonthlyDayOfTheMonth, $P_Enabled){
+
+    Try {
+
+        #connect to the sql server, and then connect to the job that was passed in
+        $SQLServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server($P_ServerName) 
+        $sqlJob = $SQLServer.JobServer.Jobs[$P_JobName]
+
+        #split the time into minutes and seconds, feed that to a timespan
+        $TimeList = $P_JobStartTime -split ":"
+        $jobStartTime = New-TimeSpan -Hour $TimeList[0] -Minutes $TimeList[1]
+        
+        #create a new schedule
+        $sqlJobSchedule = New-Object ('Microsoft.SqlServer.Management.Smo.Agent.JobSchedule') ($sqlJob, "$P_JobName")
+        #provide a slightly descriptive name
+        $sqlJobSchedule.Name = "$P_ScheduleType $P_DaysOfTheWeek $jobStartTime"
+
+        #set enabled status of the job
+        if ($P_Enabled -eq "False") {
+            $sqlJobSchedule.IsEnabled = $false
+        } Else {
+            $sqlJobSchedule.IsEnabled = $true
+        }
+        
+        #set the start date and time of the job
+        $sqlJobSchedule.activeStartDate = $P_jobStartDate
+        $sqlJobSchedule.ActiveStartTimeofDay = $JobStartTime
+
+        #set how often the job recurs, based on requency type
+        $sqlJobSchedule.FrequencyRecurrenceFactor = $P_RecurrenceFrequency
+
+        if ($P_ScheduleType -eq "Weekly"){
+            $sqlJobSchedule.FrequencyTypes = [Microsoft.SqlServer.Management.SMO.Agent.FrequencyTypes]::Weekly
+            #for weekly uses the bitmask from the weekdays
+            $JobFrequencyIntervalNumeric = agent_SplitFrequency($P_DaysOfTheWeek)
+            $sqlJobSchedule.FrequencyInterval = $JobFrequencyIntervalNumeric
+        }
+        elseif ($P_ScheduleType -eq "Monthly") {
+            $sqlJobSchedule.FrequencyTypes = [Microsoft.SqlServer.Management.SMO.Agent.FrequencyTypes]::Monthly
+            
+            #for montly uses the day of the month (could get kind of ugly error if you put in illogical day)
+            if (!$P_MonthlyDayOfTheMonth) {$P_MonthlyDayOfTheMonth = 1}
+            $sqlJobSchedule.Frequencyinterval = $P_MonthlyDayOfTheMonth
+            
+        } else {
+            Throw "Unsupported Scheduletype value: [$P_ScheduleType]"
+        }
+        
+        #Enddate is not required, so I did not default this
+        If ($P_jobEndDate){
+            $sqlJobSchedule.ActiveEndDate = $P_JobEndDate
+        }
+
+        #The default is onlyonce, but if you choose minutes for in day interval type, you can choose to have things repeat multiple times
+        if ($P_InDayIntervalType -eq "Minutes") {
+            $sqlJobSchedule.frequencySubDayTypes = [Microsoft.SqlServer.Management.SMO.Agent.FrequencySubDayTypes]::Minute
+            #this is now the number of minutes in the interval
+            $sqlJobSchedule.frequencySubdayInterval = $P_InDayInterval
+            
+            #it repeats until this time, which we convert to a time span
+            if (!$P_JobEndTime){
+                $P_JobEndTime = "23:59:59"
+            }
+            $EndTimeList = $P_JobEndTime -split ":"
+            IF (!$EndTimeSeconds) { $EndTimeSeconds = 59}
+            $jobEndTime = New-TimeSpan -Hour $EndTimeList[0] -Minutes $EndTimeList[1] -Seconds $EndTimeSeconds
+            $sqlJobSchedule.ActiveEndTimeofDay = $JobEndTime
+
+        } Else {
+            #otherwise it is a onetime operation
+            $sqlJobSchedule.frequencySubDayTypes = [Microsoft.SqlServer.Management.SMO.Agent.FrequencySubDayTypes]::Once
+            $sqlJobSchedule.frequencySubdayInterval = 0
+        }
+        
+        #create the schedule
+        $sqlJobSchedule.Create()     
+        
+        #alter the job
+        $sqlJob.Alter()
+
+        if ($G_VerboseDetail){
+                Write-Host " Added schedule to $P_JobName"
+        }
+    }
+    Catch {
+        Write-Error $_
+        write-host "Error adding schedule to $P_JobName";
+        THROW
+    }
+
+}
+function agent_AddOneTimeScheduleToJob($P_ServerName, $P_JobName, $P_jobStartDate, $P_JobStartTime, $P_Enabled) {
+    #use to add a onetime schedule to a job
+    Try {
+        if ($G_VerboseDetail) {
+            write-host "Adding onetime schedule to $P_JobName"
+        }
+
+        
+        #connect to the sql server, and then connect to the job that was passed in
+        $SQLServer = New-Object -TypeName  Microsoft.SQLServer.Management.Smo.Server($P_ServerName) 
+        $sqlJob = $SQLServer.JobServer.Jobs[$P_JobName]
+
+        #create the new schedule
+        $sqlJobSchedule = New-Object ('Microsoft.SqlServer.Management.Smo.Agent.JobSchedule') ($sqlJob, "$p_JobName")
+        
+        #give it an obvious name
+        $sqlJobSchedule.Name = "ONETIME-$P_JobName-$JobStartTime"
+        
+        #enable the job based on the setting
+        if ($P_Enabled -eq "False") {
+            $sqlJobSchedule.IsEnabled = $false
+        } Else {
+            $sqlJobSchedule.IsEnabled = $true
+        }
+
+        $sqlJobSchedule.FrequencyTypes = [Microsoft.SqlServer.Management.SMO.Agent.FrequencyTypes]::OneTime
+
+        #set the start time from the required prarmeter
+        $TimeList = $P_JobStartTime -split ":"
+        $jobStartTime = New-TimeSpan -Hour $TimeList[0] -Minute $TimeList[1]
+        $sqlJobSchedule.ActiveStartTimeofDay = $JobStartTime
+    
+        #set the job start date from a standard data format
+        $JobStartDate = [datetime]::parseexact($P_JobStartDate, 'yyyy-MM-dd', $null)
+        $sqlJobSchedule.activeStartDate = $JobStartDate
+
+        #create the schedule
+        $sqlJobSchedule.Create()
+
+        #alter the job
+        $sqlJob.Alter()
+
+    }
+        Catch {
+            Write-Error $_
+            write-host "Error adding schedule to $P_JobName";
+            THROW
+        }
+}
+

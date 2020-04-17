@@ -1,12 +1,62 @@
 {
+    "Todo": "To add: Automatically start when SQL Server starts, Start when CPU is idle ",
+    "Todo2": "To add: Monthly relative Schedule type, like first Monday of the month ",
+    "Required" : "SystemName, Subsystemname, EnvironmentName, Scheduletype, JobStartTime",
     "JobSchedule": [
+        {
+            "SystemName": "DayAnalysis",
+            "SubsystemName": "_MasterDayAnalysis",
+            "EnvironmentName": "GeneralOperation",
+            "ScheduleType" : "Weekly",
+            "JobStartTime" : "13:34"
+        },
         {
             "SystemName": "OrderProcessing",
             "SubsystemName": "_MasterOrderProcessing",
             "EnvironmentName": "GeneralOperation",
-            "JobStartHour" : 12,
-            "JobStartMinute" : 0,
-            "DaysOfWeek" : "MON,TUE,WED,THU,FRI,SAT,SUN"
+            "Enabled":"False",
+            "ScheduleType" : "Weekly",
+            "RecurrenceFrequency" : "2",
+            "DaysOfTheWeek" : "MON,TUE,WED,THU,FRI,SAT,SUN",
+            "JobStartTime" : "12:00",
+            "Notes" : "Once every other week, every day "
+            
+        },
+        {
+            "SystemName": "SalesProcessing",
+            "SubsystemName": "_MasterSalesProcessing",
+            "EnvironmentName": "GeneralOperation",
+            "ScheduleType" : "Once",
+            "JobStartDate" : "2020-04-15",
+            "JobStartTime" : "12:00",
+            "Notes" : "Just once"
+        },
+        {
+            "SystemName": "OrderDataWarehouse",
+            "SubsystemName": "_MasterOrderDataWarehouse",
+            "EnvironmentName": "GeneralOperation",
+            "ScheduleType" : "Monthly",
+            "RecurrenceFrequency" : 3,
+            "MonthlyDayOfTheMonth": 6,
+            "JobStartDate" : "2020-04-15",
+            "JobStartTime" : "12:00",
+            "JobEndDate" : "2021-04-15",
+            "Notes" : "Every 3 months on the 15th at Noon"
+        },
+        {
+            "SystemName": "PostProcessing",
+            "SubsystemName": "_PostProcessing",
+            "EnvironmentName": "GeneralOperation",
+            "ScheduleType" : "Weekly",
+            "DaysOfTheWeek" : "MON,WED,FRI",
+            
+            "JobStartTime" : "12:00",
+            "JobEndTime" : "14:00",
+            "JobEndDate" : "2020-05-10",
+            
+            "InDayIntervalType": "Minutes",
+            "InDayInterval" : 10,
+            "Notes" : "Mon, Wed, Fri from 12-2PM, every 10 minutes"
         }
     ]
 }

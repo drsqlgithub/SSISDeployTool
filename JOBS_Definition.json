@@ -25,7 +25,7 @@
             "SubsystemName": "_MasterDayAnalysis",
             "EnvironmentName": "GeneralOperation",
             "JobDescription" : "Job for Day Analysis",
-            "JobStartType": "Scheduled",
+            "JobStartType": "Manual",
             "JobType": "TSQL",
             "JobCodeText" : "Insert Into Test.TestJobs(SystemName) VALUES ('DayAnalysis')",
             "JobCodeDatabase": "SSISDBHelper"
